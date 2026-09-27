@@ -1,0 +1,306 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Note Editor</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="d-flex align-items-center mb-3">
+      <h1 class="h4 mb-0">Node Note</h1>
+      <span class="ms-2 text-muted small">for <code>{{ node_id }}</code></span>
+      {% if last_updated %}
+      <span class="ms-auto small text-secondary">Last saved: {{ last_updated|date:"Y-m-d H:i" }}</span>
+      {% endif %}
+    </div>
+
+    <div class="alert alert-info d-flex justify-content-between align-items-center">
+      <span>
+        <i class="fas fa-user me-2"></i>
+        Logged in as: <strong>{{ user.username }}</strong>
+        {% if is_superuser %}
+        <span class="badge bg-warning text-dark ms-2">Superuser</span>
+        {% else %}
+        <span class="badge bg-primary ms-2">Normal User</span>
+        {% endif %}
+      </span>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <!-- Problem Tracking Section -->
+          <div class="mb-3 p-3" style="
+                background: #f9fafb;
+                border-radius: 6px;
+                border: 1px solid #e5e7eb;
+              ">
+            <div class="d-flex align-items-center mb-3">
+              <i class="fas fa-bug me-2 text-danger"></i>
+              <strong>Problem Tracking</strong>
+            </div>
+
+            <div class="row">
+              <div class="col-md-4 mb-2">
+                <label for="note-problem-category" class="form-label small">Problem Category</label>
+                <select name="problem_category" id="note-problem-category" class="form-select">
+                  <option value="">Select a category...</option>
+                </select>
+              </div>
+
+              <div class="col-md-4 mb-2">
+                <label for="note-problem-subcategory" class="form-label small">Problem Sub-Category</label>
+                <select name="problem_subcategory" id="note-problem-subcategory" class="form-select" disabled>
+                  <option value="">Select a sub-category...</option>
+                </select>
+              </div>
+
+              <div class="col-md-4 mb-2">
+                <label for="{{ form.problem_date.id_for_label }}" class="form-label small">Problem Raised Date</label>
+                {{ form.problem_date }}
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-2">
+            {{ form.content.label_tag }} {{ form.content }}
+            {% if form.content.errors %}
+            <div class="text-danger small">
+              {{ form.content.errors|striptags }}
+            </div>
+            {% endif %}
+            <div class="d-flex justify-content-between mt-1 small text-muted">
+              <span id="char-counter">0 chars</span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="small text-muted mb-1">Preview (clickable links)</div>
+            <div id="note-preview" class="border rounded p-2 bg-white" style="min-height: 3rem; white-space: normal">
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save me-1"></i> Save
+            </button>
+            <div class="form-check d-flex align-items-center ms-3">
+              {{ form.fault_resolved }}
+              <label class="form-check-label ms-2" for="fault-resolved-checkbox">
+                <span id="fault-status-label">
+                  {% if note.fault_resolved %}
+                  <i class="fas fa-check-circle text-success me-1"></i> Fault
+                  Resolved {% else %}
+                  <i class="fas fa-exclamation-circle text-warning me-1"></i>
+                  Fault Open {% endif %}
+                </span>
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <div class="alert alert-secondary small mb-0">
+        <strong>Note:</strong>
+        <ul class="mb-0 mt-1">
+          <li>A timestamp line will be appended automatically on save.</li>
+          {% if not is_superuser %}
+          <li>
+            As a normal user, your modifications will be tracked with your
+            username and timestamp at the top of the note.
+          </li>
+          {% endif %}
+        </ul>
+
+        {% if note and note.problem_category or note.problem_subcategory or note.problem_date %}
+
+
+        <hr class="my-2" />
+        <div class="mt-2">
+          <strong>Saved Problem Info:</strong>
+          <div class="mt-1">
+            {% if note.problem_category %}
+            <span class="badge bg-danger">{{ note.problem_category }}</span>
+            {% endif %} {% if note.problem_subcategory %}
+            <span class="badge bg-warning text-dark">{{ note.problem_subcategory }}</span>
+            {% endif %} {% if note.problem_date %}
+            <span class="badge bg-info text-dark">Raised: {{ note.problem_date|date:"Y-m-d" }}</span>
+            {% endif %} {% if note.fault_resolved %}
+            <span class="badge bg-success">
+              <i class="fas fa-check-circle me-1"></i>Resolved
+            </span>
+            {% else %}
+            <span class="badge bg-danger">
+              <i class="fas fa-exclamation-circle me-1"></i>Open
+            </span>
+            {% endif %}
+          </div>
+          <div class="mt-2 small text-muted">
+            <i class="fas fa-info-circle me-1"></i>
+            This problem info is automatically embedded at the top of your
+            note content for easy searching.
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const textarea = document.querySelector('textarea[name="content"]');
+      const charCounter = document.getElementById("char-counter");
+      const preview = document.getElementById("note-preview");
+
+      function escapeHtml(text) {
+        return (text || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function normalizeUrl(raw) {
+        const candidate = (raw || "").trim();
+        if (!candidate) return null;
+
+        const withScheme = /^https?:\/\//i.test(candidate)
+          ? candidate
+          : candidate.startsWith("www.")
+            ? `https://${candidate}`
+            : null;
+
+        if (!withScheme) return null;
+
+        try {
+          const url = new URL(withScheme);
+          if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+          return url.toString();
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function linkifyText(text) {
+        const escaped = escapeHtml(text);
+        const urlRegex = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)\b/gi;
+
+        return escaped.replace(urlRegex, (match) => {
+          const trimmed = match.replace(/[),.;:?]+$/g, (m) => m);
+          const suffix = match.slice(trimmed.length);
+          const normalized = normalizeUrl(trimmed);
+          if (!normalized) return match;
+
+          const link = `<a href="${normalized}" target="_blank" rel="noopener noreferrer">${trimmed}</a>`;
+          return link + suffix;
+        });
+      }
+
+      function updatePreview() {
+        if (!textarea || !preview) return;
+        const html = linkifyText(textarea.value).replace(/\n/g, "<br>");
+        preview.innerHTML = html || "<span class=\"text-muted\">(empty)</span>";
+      }
+
+      function updateCharCounter() {
+        if (!textarea) return;
+        const text = textarea.value;
+        charCounter.textContent = `${text.length} chars`;
+      }
+      ["input", "change", "keyup"].forEach((evt) => {
+        textarea.addEventListener(evt, updateCharCounter);
+        textarea.addEventListener(evt, updatePreview);
+      });
+      updateCharCounter();
+      updatePreview();
+
+      const faultCheckbox = document.getElementById(
+        "fault-resolved-checkbox"
+      );
+      const statusLabel = document.getElementById("fault-status-label");
+
+      if (faultCheckbox && statusLabel) {
+        faultCheckbox.addEventListener("change", function () {
+          if (this.checked) {
+            statusLabel.innerHTML =
+              '<i class="fas fa-check-circle text-success me-1"></i> Fault Resolved';
+          } else {
+            statusLabel.innerHTML =
+              '<i class="fas fa-exclamation-circle text-warning me-1"></i> Fault Open';
+          }
+        });
+      }
+
+      const categorySel = document.getElementById("note-problem-category");
+      const subSel = document.getElementById("note-problem-subcategory");
+
+      if (categorySel && subSel) {
+        let faultSchema = [];
+        try {
+          faultSchema = JSON.parse("{{ fault_schema|escapejs }}");
+        } catch (e) {
+          console.error("Failed to parse fault schema:", e);
+          return;
+        }
+
+        const initialCategory =
+          "{{ form.problem_category.value|default:'' }}";
+        const initialSub = "{{ form.problem_subcategory.value|default:'' }}";
+        faultSchema.forEach((cat) => {
+          const opt = document.createElement("option");
+          opt.value = cat.name;
+          opt.textContent = cat.name;
+          if (cat.name === initialCategory) {
+            opt.selected = true;
+          }
+          categorySel.appendChild(opt);
+        });
+        categorySel.addEventListener("change", () => {
+          subSel.innerHTML =
+            '<option value="">Select a sub-category...</option>';
+          const selectedCat = categorySel.value;
+          if (!selectedCat) {
+            subSel.disabled = true;
+            return;
+          }
+          const catObj = faultSchema.find((c) => c.name === selectedCat);
+          if (catObj && catObj.subcategories) {
+            catObj.subcategories.forEach((sub) => {
+              const opt = document.createElement("option");
+              opt.value = sub.name;
+              opt.textContent = sub.name;
+              subSel.appendChild(opt);
+            });
+            subSel.disabled = false;
+          }
+        });
+
+        if (initialCategory) {
+          categorySel.dispatchEvent(new Event("change"));
+          setTimeout(() => {
+            if (initialSub) {
+              const subOpt = Array.from(subSel.options).find(
+                (opt) => opt.value === initialSub
+              );
+              if (subOpt) {
+                subOpt.selected = true;
+              }
+            }
+          }, 50);
+        }
+      }
+    })();
+  </script>
+</body>
+
+</html>
